@@ -35,7 +35,6 @@ from diffusers.utils.import_utils import is_xformers_available
 from PIL import Image
 import PIL
 import safetensors
-import yaml
 import numpy as np
 from diffusers import DiffusionPipeline
 from sdxl_the_chosen_one import train as train_pipeline
@@ -46,6 +45,12 @@ from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import cdist
+
+from utils.common import config2args, log_print
+from utils.logger import get_logger
+
+
+log = get_logger(__name__, dump_dir='./log')
 
 
 def train_loop(args, loop_num: int, vis=True, start_from=0):
@@ -64,18 +69,12 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
     
     # start looping
     for loop in range(start_from, loop_num):
-        print()
-        print("###########################################################################")
-        print("###########################################################################")
-        print(f"[{loop}/{loop_num-1}] Start.")
-        print("###########################################################################")
-        print("###########################################################################")
-        print()
+        log.info(f"[{loop}/{loop_num-1}] Start.")
         
-        # load dinov2 every epoch, since we clean the model after feature etraction
+        # load dinov2 every epoch, since we clean the model after feature extraction
         dinov2 = load_dinov2()
         
-        # load diffusion pipeline every epoch for new training image generation, since we clean the model after feature etraction
+        # load diffusion pipeline every epoch for new training image generation, since we clean the model after feature extraction
         if loop == 0:
             # load from default SDXL config.
             pipe = load_trained_pipeline()
@@ -102,7 +101,7 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
         image_embs = []
         images = []
         for n_img in range(args.num_of_generated_img):
-            print(f"[Loop [{loop}/{loop_num-1}], generating image {n_img}/{args.num_of_generated_img - 1}")
+            log.info(f"[Loop [{loop}/{loop_num-1}], generating image {n_img}/{args.num_of_generated_img - 1}")
             
             # set up different seeds for each image
             torch.manual_seed(n_img * np.random.randint(1000))
@@ -137,22 +136,10 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
         else:
             pairwise_distances = np.mean(cdist(embeddings, embeddings, 'euclidean'))
             if pairwise_distances < init_dist * args.convergence_scale:
-                print()
-                print("###########################################################################")
-                print("###########################################################################")
-                print(f"Converge at {loop}. Target distance: {init_dist}, current pairwise distance: {pairwise_distances}. Final model saved at {os.path.join(output_dir_base, args.character_name, str(loop - 1))}")
-                print("###########################################################################")
-                print("###########################################################################")
-                print()
+                log.info(f"Converge at {loop}. Target distance: {init_dist}, current pairwise distance: {pairwise_distances}. Final model saved at {os.path.join(output_dir_base, args.character_name, str(loop - 1))}")
                 return os.path.join(output_dir_base, args.character_name, str(loop - 1)), 
             else:
-                print()
-                print("###########################################################################")
-                print("###########################################################################")
-                print(f"Target distance: {init_dist}, current pairwise distance: {pairwise_distances}.")
-                print("###########################################################################")
-                print("###########################################################################")
-                print()
+                log.info(f"Target distance: {init_dist}, current pairwise distance: {pairwise_distances}.")
         # clustering
         centers, labels, elements, images = kmeans_clustering(args, embeddings, images = images)
         
@@ -176,13 +163,7 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
         # train and save the models according to each loop's folder, and end the loop
         train_pipeline(args, loop, loop_num)
         
-        print()
-        print("###########################################################################")
-        print("###########################################################################")
-        print(f"[{loop}/{loop_num-1}] Finish.")
-        print("###########################################################################")
-        print("###########################################################################")
-        print()
+        log.info(f"[{loop}/{loop_num-1}] Finish.")
         
 
 def kmeans_clustering(args, data_points, images = None):
@@ -244,7 +225,7 @@ def prepare_init_images(source_path, target_root_path):
         dest_path = os.path.join(init_loop_img_fdr, item)
         
         shutil.copy2(src_path, dest_path)
-        print(f"Copied {src_path} to {dest_path}")
+        log.info(f"Copied {src_path} to {dest_path}")
 
 
 def load_trained_pipeline(model_path = None, load_lora=True, lora_path=None):
@@ -260,18 +241,6 @@ def load_trained_pipeline(model_path = None, load_lora=True, lora_path=None):
         pipe = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0")
     pipe.to("cuda")
     return pipe
-
-
-def config_2_args(path):
-    with open(path, 'r') as file:
-        yaml_data = yaml.safe_load(file)
-    parser = argparse.ArgumentParser(description="Generate args from config")
-    for key, value in yaml_data.items():
-        parser.add_argument(f'--{key}', type=type(value), default=value)
-    
-    args = parser.parse_args([])
-        
-    return args
 
 
 def infer_model(model, image):
@@ -301,7 +270,12 @@ def load_dinov2():
 
 
 if __name__ == "__main__":
-    args = config_2_args("./config/theChosenOne_fox.yaml")
+    cmd_parser = argparse.ArgumentParser(description="Process running command.")
+    cmd_parser.add_argument('-c', '--config_file', type=str) 
+    cmd_args = cmd_parser.parse_args()
+    
+    args = config2args(cmd_args.config_file)
     _ = train_loop(args, args.max_loop, start_from=0)
     
-    print(args)
+    log.info(args)
+    
