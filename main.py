@@ -278,10 +278,14 @@ def load_dinov2():
 if __name__ == "__main__":
     cmd_parser = argparse.ArgumentParser(description="Process running command.")
     cmd_parser.add_argument('-c', '--config_file', type=str) 
+    cmd_parser.add_argument('-l', '--beginning_loop_id', type=int, default=0) 
     cmd_args = cmd_parser.parse_args()
+    log.info(cmd_args)
     
     args = config2args(cmd_args.config_file)
-    _ = train_loop(args, args.max_loop, start_from=0)
-    
     log.info(args)
+    
+    train_loop(args, args.max_loop, start_from=cmd_args.beginning_loop_id)
+    
+    log.info(f"Log is dumped to {log.dump_path.absolute()}.")
     
