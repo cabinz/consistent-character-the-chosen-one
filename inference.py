@@ -20,7 +20,7 @@ args = config2args(cmd_args.config_file)
 
 
 # Set up output directory
-output_dir = os.path.join(args.output_dir, args.character_name)
+output_dir = os.path.join(cmd_args.output_dir, args.character_name)
 os.makedirs(output_dir, exist_ok=True)
 
 # Load models
@@ -30,12 +30,12 @@ pipe.to("cuda")
 pipe.load_lora_weights(os.path.join(model_path, f"checkpoint-{args.checkpointing_steps * args.num_train_epochs}"))
 
 # Infer
-for prompt_postfix in args.prompt_postfixes:
+for prompt_postfix in cmd_args.prompt_postfixes:
     img_filename_postfix = prompt_postfix.replace(" ", "_")
     img_path = os.path.join(output_dir, f"{args.character_name}_{img_filename_postfix}.png")
     
-    # prompt = f"A {args.prompt_img_type} of {args.placeholder_token} {prompt_postfix}."
-    prompt = f"{args.placeholder_token} {prompt_postfix}."
+    # prompt = f"A photo of {args.placeholder_token} {prompt_postfix}."
+    prompt = f"{args.validation_prompt} {prompt_postfix}." # "A photo of <placeholder> ..."
     image = pipe(prompt, num_inference_steps=35, guidance_scale=7.5).images[0]
 
     image.save(img_path)
