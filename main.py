@@ -50,7 +50,7 @@ from utils.common import config2args, log_print
 from utils.logger import get_logger
 
 
-log = get_logger(__name__, dump_dir='./log')
+log = get_logger(__name__, dump_dir='./out/log')
 
 
 def train_loop(args, loop_num: int, vis=True, start_from=0):
@@ -68,58 +68,59 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
     init_dist = 0
     
     # start looping
-    for loop in range(start_from, loop_num):
-        log.info(f"[{loop}/{loop_num-1}] Start.")
+    for loop_id in range(start_from, loop_num):
+        log.info(f"[{loop_id}/{loop_num-1}] Start.")
         
         # load dinov2 every epoch, since we clean the model after feature extraction
         dinov2 = load_dinov2()
         
         # load diffusion pipeline every epoch for new training image generation, since we clean the model after feature extraction
-        if loop == 0:
+        prev_output_dir = os.path.join(output_dir_base, args.character_name, str(loop_id - 1))
+        if loop_id == 0:
             # load from default SDXL config.
             pipe = load_trained_pipeline()
         else:
             # Note that these configurations are changned during training.
             # Since the the training is epoch based and we use iterations, the diffuser training script automatically calculate a new epoch according to the iteration and dataset size, thus the predefined epoches will be overrided.
-            args.output_dir_per_loop = os.path.join(output_dir_base, args.character_name, str(loop - 1))
-            
-            # load model from the output dir in PREVIOUS loop
-            pipe = load_trained_pipeline(model_path=args.output_dir_per_loop, 
-                                          load_lora=True, 
-                                          lora_path=os.path.join(args.output_dir_per_loop, f"checkpoint-{checkpointing_steps * num_train_epochs}"))
+            # Load model from the output dir in PREVIOUS loop
+            ckpt_dir = os.path.join(prev_output_dir, f"checkpoint-{checkpointing_steps * num_train_epochs}")
+            pipe = load_trained_pipeline(model_path=prev_output_dir, load_lora=True, lora_path=ckpt_dir)
         
         # update model output dir for CURRENT loop
-        args.output_dir_per_loop = os.path.join(output_dir_base, args.character_name, str(loop))
+        args.output_dir_per_loop = os.path.join(output_dir_base, args.character_name, str(loop_id))
         
-        # set up the training data folder used in training, overwrite and recreate
-        args.train_data_dir_per_loop = os.path.join(train_data_dir_base, args.character_name, str(loop))
+        # set up the pool directory storing the generated images
+        # (from which training data are chosen)
+        pool_dir = f"{args.backup_data_dir_root}/{args.character_name}/{loop_id}"
+        os.makedirs(pool_dir, exist_ok=True)
+        # set up the training data directory, overwrite and recreate
+        args.train_data_dir_per_loop = os.path.join(train_data_dir_base, args.character_name, str(loop_id))
         if os.path.exists(args.train_data_dir_per_loop):
             shutil.rmtree(args.train_data_dir_per_loop)
-        os.makedirs(args.train_data_dir_per_loop, exist_ok=True)
+        os.makedirs(args.train_data_dir_per_loop)
         
         # generate new images
         image_embs = []
         images = []
         for n_img in range(args.num_of_generated_img):
-            log.info(f"[Loop [{loop}/{loop_num-1}], generating image {n_img}/{args.num_of_generated_img - 1}")
+            log.info((f"LP {loop_id:4>}/{loop_num-1:4<} "
+                      f"generating IMG {n_img:4>}/{args.num_of_generated_img - 1:4<}"))
             
             # set up different seeds for each image
             torch.manual_seed(n_img * np.random.randint(1000))
-            tmp_folder = f"{args.backup_data_dir_root}/{args.character_name}/{loop}"
             
-            # we can load the initially generated images from local backup folder
-            if loop==0 and os.path.exists(os.path.join(tmp_folder, f"{n_img}.png")):
-                image = Image.open(os.path.join(tmp_folder, f"{n_img}.png")).convert('RGB')
+            # the generated images could be loaded from local backup folder
+            # if it exists already
+            img_path = os.path.join(pool_dir, f"{n_img}.png")
+            if loop_id == 0 and os.path.exists(img_path):
+                image = Image.open(os.path.join(pool_dir, f"{n_img}.png")).convert('RGB')
             else:
                 image = generate_images(pipe, prompt=args.inference_prompt, infer_steps=args.infer_steps)
+                image.save(img_path)
                 
             images.append(image)
-            image_embs.append(infer_model(dinov2, image).detach().cpu().numpy())
-            
-            # save the initial images in the backup folder
-            if not os.path.exists(tmp_folder):
-                os.makedirs(tmp_folder, exist_ok=True)
-            image.save(os.path.join(tmp_folder, f"{n_img}.png"))
+            image_embs.append(
+                infer_model(dinov2, image).detach().cpu().numpy())
         
         # clean up the GPU consumption after inference
         del pipe
@@ -131,13 +132,13 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
         embeddings = embeddings.reshape(len(image_embs), -1)
         
         # evaluate convergence
-        if loop == 0:
+        if loop_id == 0:
             init_dist = np.mean(cdist(embeddings, embeddings, 'euclidean'))
         else:
             pairwise_distances = np.mean(cdist(embeddings, embeddings, 'euclidean'))
             if pairwise_distances < init_dist * args.convergence_scale:
-                log.info(f"Converge at {loop}. Target distance: {init_dist}, current pairwise distance: {pairwise_distances}. Final model saved at {os.path.join(output_dir_base, args.character_name, str(loop - 1))}")
-                return os.path.join(output_dir_base, args.character_name, str(loop - 1)), 
+                log.info(f"Converge at {loop_id}. Target distance: {init_dist}, current pairwise distance: {pairwise_distances}. Final model saved at {prev_output_dir}")
+                return prev_output_dir
             else:
                 log.info(f"Target distance: {init_dist}, current pairwise distance: {pairwise_distances}.")
         # clustering
@@ -145,7 +146,7 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
         
         # visualize
         if vis:
-            kmeans_2D_visualize(args, centers, elements, labels, loop)
+            kmeans_2D_visualize(args, centers, elements, labels, loop_id)
         
         # evaluate
         center_norms = np.linalg.norm(centers[labels] - elements, axis=-1, keepdims=True) # each data point subtract its coresponding center
@@ -161,9 +162,9 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
                 sample.save(os.path.join(args.train_data_dir_per_loop, f"{sample_id}.png"))
         
         # train and save the models according to each loop's folder, and end the loop
-        train_pipeline(args, loop, loop_num)
+        train_pipeline(args, loop_id, loop_num)
         
-        log.info(f"[{loop}/{loop_num-1}] Finish.")
+        log.info(f"[{loop_id}/{loop_num-1}] Finish.")
         
 
 def kmeans_clustering(args, data_points, images = None):
