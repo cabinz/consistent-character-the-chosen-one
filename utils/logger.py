@@ -98,6 +98,8 @@ def get_logger(name=None, level='INFO', dump_dir=None):
         file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(logging.Formatter(fmt=LOG_FMT_MSG, datefmt=LOG_FMT_TIMESTAMP))
         configured_logger.addHandler(file_handler)
+        
+        configured_logger.dump_path = log_file
 
     return configured_logger
 
