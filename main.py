@@ -199,6 +199,11 @@ def make_continuous(lst):
 
 
 def kmeans_2D_visualize(args, centers, data, labels, loop_num):
+    img_filename = f"{args.character_name}_KMeans_res_Loop_{loop_num}.png"
+    output_dir = args.kmeans_result_dir if hasattr(args, "kmeans_result_dir") else "./kmeans_results"
+    os.makedirs(output_dir, exist_ok=True)
+    img_path = os.path.join(output_dir, img_filename)
+    
     # visualize 2D t-SNE results
     plt.figure(figsize=(20, 16))
     tsne = TSNE(n_components=2, random_state=42, perplexity=len(data) - 1)
@@ -207,7 +212,7 @@ def kmeans_2D_visualize(args, centers, data, labels, loop_num):
     for i in range(args.kmeans_center):
         cluster_points = np.array(embeddings_2d[labels==i])
         plt.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f"Cluster {i + 1}", s=100)
-    plt.savefig(f"kmeans_results/{args.character_name}_KMeans_res_Loop_{loop_num}.png")
+    plt.savefig(img_path)
     
         
 def compare_features(image_features, cluster_centroid):
