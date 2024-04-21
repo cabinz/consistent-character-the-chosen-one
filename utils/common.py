@@ -13,11 +13,20 @@ def config2args(path):
         
     return args
 
-def log_print(text):
-    print()
-    print("###########################################################################")
-    print("###########################################################################")
-    print(text)
-    print("###########################################################################")
-    print("###########################################################################")
-    print()
+def log_print(text, log=None):
+    SPLIT_LN = "###########################################################################"
+    if log is None:
+        print()
+        print(SPLIT_LN)
+        print(SPLIT_LN)
+        print(text)
+        print(SPLIT_LN)
+        print(SPLIT_LN)
+        print()
+    else:
+        log.info(SPLIT_LN)
+        log.info(SPLIT_LN)
+        log.info(text)
+        log.info(SPLIT_LN)
+        log.info(SPLIT_LN)
+        

@@ -32,7 +32,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 import transformers
 from accelerate import Accelerator
-from accelerate.logging import get_logger
+# from accelerate.logging import get_logger
 from accelerate.utils import DistributedDataParallelKwargs, ProjectConfiguration, set_seed
 from datasets import load_dataset
 from huggingface_hub import create_repo, upload_folder
@@ -52,6 +52,8 @@ from diffusers.utils.import_utils import is_xformers_available
 from PIL import Image
 import PIL
 import safetensors
+
+from utils.logger import get_logger
 
 
 if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
@@ -784,12 +786,13 @@ def train(args, loop=0, loop_num = 0):
         import wandb
 
     # Make one log on every process with the configuration for debugging.
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
-    )
-    logger.info(accelerator.state, main_process_only=False)
+    # logging.basicConfig(
+    #     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    #     datefmt="%m/%d/%Y %H:%M:%S",
+    #     level=logging.INFO,
+    # )
+    # logger.info(accelerator.state, main_process_only=False)
+    logger.info(accelerator.state)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_warning()
@@ -1360,13 +1363,9 @@ def train(args, loop=0, loop_num = 0):
     # keep original embeddings as reference
     orig_embeds_params_one = accelerator.unwrap_model(text_encoder_one).get_input_embeddings().weight.data.clone()
     orig_embeds_params_two = accelerator.unwrap_model(text_encoder_two).get_input_embeddings().weight.data.clone()
-    print()    
-    print("###########################################################################")
-    print("###########################################################################")
-    print(f"[{loop}/{loop_num}] Start Training!")
-    print("###########################################################################")
-    print("###########################################################################")
-    print()
+    
+    logger.info(f"[{loop}/{loop_num}] Start Training!")
+    
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
         if args.train_text_encoder:
@@ -1541,13 +1540,8 @@ def train(args, loop=0, loop_num = 0):
 
         if accelerator.is_main_process:
             if args.validation_prompt is not None and epoch % args.validation_epochs == 0:
-                print()
-                print("###########################################################################")
-                print("###########################################################################")
-                print(f"[{loop}/{loop_num}] Validating and generating images for validation in tensoirboard / wandb.")
-                print("###########################################################################")
-                print("###########################################################################")
-                print()
+                logger.info(f"[{loop}/{loop_num}] Validating and generating images for validation in tensoirboard / wandb.")
+                
                 logger.info(
                     f"Running validation... \n Generating {args.num_validation_images} images with prompt:"
                     f" {args.validation_prompt}."
@@ -1594,13 +1588,8 @@ def train(args, loop=0, loop_num = 0):
                 torch.cuda.empty_cache()
 
     # Save the lora layers
-    print()
-    print("###########################################################################")
-    print("###########################################################################")
-    print(f"[{loop}/{loop_num}] Saving lora layers")
-    print("###########################################################################")
-    print("###########################################################################")
-    print()
+    logger.info(f"[{loop}/{loop_num}] Saving lora layers")
+    
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
         unet = accelerator.unwrap_model(unet)
@@ -1624,13 +1613,8 @@ def train(args, loop=0, loop_num = 0):
 
         # Final inference
         # Load previous pipeline
-        print()
-        print("###########################################################################")
-        print("###########################################################################")
-        print(f"[{loop}/{loop_num}] Testing and generating images for testing in tensoirboard / wandb.")
-        print("###########################################################################")
-        print("###########################################################################")
-        print()
+        logger.info(f"[{loop}/{loop_num}] Testing and generating images for testing in tensoirboard / wandb.")
+        
         pipeline = StableDiffusionXLPipeline.from_pretrained(
             args.pretrained_model_name_or_path, vae=vae, revision=args.revision, torch_dtype=weight_dtype
         )
@@ -1670,13 +1654,7 @@ def train(args, loop=0, loop_num = 0):
             save_full_model = args.save_as_full_pipeline
         if save_full_model:
             
-            print()
-            print("###########################################################################")
-            print("###########################################################################")
-            print(f"[{loop}/{loop_num}] Saving full model for text inversion!")
-            print("###########################################################################")
-            print("###########################################################################")
-            print()
+            logger.info(f"[{loop}/{loop_num}] Saving full model for text inversion!")
             
             pipeline = StableDiffusionXLPipeline.from_pretrained(
                 args.pretrained_model_name_or_path,
