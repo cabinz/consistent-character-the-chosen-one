@@ -1,5 +1,6 @@
 out/
 bak/
+wandb/
 
 # from https://github.com/microsoft/vscode-python/blob/main/.gitignore
 .DS_Store
