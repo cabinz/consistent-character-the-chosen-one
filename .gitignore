@@ -1,16 +1,9 @@
-experiments/
-loop_images/
-data/
-kmeans_results/
-nohup.out
-__pycache__
-.vscode
-inference_results/
+out/
+bak/
 
 # from https://github.com/microsoft/vscode-python/blob/main/.gitignore
 .DS_Store
 .huskyrc.json
-out
 log.log
 **/node_modules
 *.pyc
