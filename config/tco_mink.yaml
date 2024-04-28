@@ -1,7 +1,8 @@
 pretrained_model_name_or_path: stabilityai/stable-diffusion-xl-base-1.0
 pretrained_vae_model_name_or_path: madebyollin/sdxl-vae-fp16-fix
 # 
-inference_prompt: A 2D animaiton of captivating Arctic fox with fluffy fur, bright eyes and nimble movements, bringing the magic of the icy wilderness to animated life.
+character_name: mink
+inference_prompt: "a cute mink with a brown jacket and red pants"
 learnable_property: object
 initializer_token: cha
 placeholder_token: <$V$>
@@ -19,10 +20,10 @@ lr_scheduler: constant
 lr_warmup_steps: 0
 mixed_precision: bf16
 seed: 42
-character_name: anime_fox
-output_dir: ./experiments
-train_data_dir: ./loop_images
-backup_data_dir_root: /home/zicheng/Data/theChosenOne/  # Your dataset backup folder
+output_dir: ./out/models
+train_data_dir: ./out/data/cohesion
+backup_data_dir_root: ./out/data/pool 
+kmeans_result_dir: out/kmeans_results
 # lora_ckpt_dir: checkpoint-1200
 max_train_steps: 500
 num_of_generated_img: 128
@@ -34,10 +35,11 @@ adam_weight_decay: 0.0001
 adam_beta1: 0.9
 adam_beta2: 0.99
 max_loop: 5
-convergence_scale: 0.8 # 80% in the paper
+convergence_scale: 0.6 # 80% in the paper
 
 # inherited from origin, no need to change
 gradient_accumulation_steps: 1
+# report_to: wandb
 report_to: tensorboard
 push_to_hub: false
 num_vectors: 1
