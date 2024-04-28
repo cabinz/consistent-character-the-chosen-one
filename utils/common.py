@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import yaml
 
 
@@ -12,6 +13,12 @@ def config2args(path):
     args = parser.parse_args([])
         
     return args
+
+
+def get_timestamp(timestr_format='%m%d%H%M%S'):
+    # '%Y%m%d%H%M%S'
+    return datetime.datetime.now().strftime(timestr_format)
+
 
 def log_print(text, log=None):
     SPLIT_LN = "###########################################################################"
@@ -29,4 +36,3 @@ def log_print(text, log=None):
         log.info(text)
         log.info(SPLIT_LN)
         log.info(SPLIT_LN)
-        
