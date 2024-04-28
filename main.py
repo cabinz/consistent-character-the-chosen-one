@@ -92,12 +92,8 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
         # set up the pool directory storing the generated images
         # (from which training data are chosen)
         pool_dir = f"{args.backup_data_dir_root}/{args.character_name}/{loop_id}"
+        loop0_pool_dir = f"{args.backup_data_dir_root}/{args.character_name}/0"
         os.makedirs(pool_dir, exist_ok=True)
-        # set up the training data directory, overwrite and recreate
-        args.train_data_dir_per_loop = os.path.join(train_data_dir_base, args.character_name, str(loop_id))
-        if os.path.exists(args.train_data_dir_per_loop):
-            shutil.rmtree(args.train_data_dir_per_loop)
-        os.makedirs(args.train_data_dir_per_loop)
         
         # generate new images
         image_embs = []
@@ -112,7 +108,7 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
             # the generated images could be loaded from local backup folder
             # if it exists already
             img_path = os.path.join(pool_dir, f"{n_img}.png")
-            if loop_id == 0 and os.path.exists(img_path):
+            if os.path.exists(img_path):
                 image = Image.open(os.path.join(pool_dir, f"{n_img}.png")).convert('RGB')
             else:
                 image = generate_images(pipe, prompt=args.inference_prompt, infer_steps=args.infer_steps)
@@ -122,25 +118,43 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
             image_embs.append(
                 infer_model(dinov2, image).detach().cpu().numpy())
         
+        # reshaping
+        embeddings = np.array(image_embs)
+        embeddings = embeddings.reshape(len(image_embs), -1)
+        
+        # Compute initial distance at the first running loop
+        if loop_id == start_from:
+            if start_from == 0:
+                init_dist = np.mean(cdist(embeddings, embeddings, 'euclidean'))
+            else:
+                loop0_embs = load_all_img_embeddings(loop0_pool_dir, dinov2)
+                loop0_embs = np.array(loop0_embs).reshape(len(image_embs), -1)
+                init_dist = np.mean(cdist(loop0_embs, loop0_embs, 'euclidean'))
+                del loop0_embs
+            log.info(f"Initial distance: {init_dist:.4f}")
+                
         # clean up the GPU consumption after inference
         del pipe
         del dinov2
         torch.cuda.empty_cache()
         
-        # reshaping
-        embeddings = np.array(image_embs)
-        embeddings = embeddings.reshape(len(image_embs), -1)
-        
         # evaluate convergence
-        if loop_id == 0:
-            init_dist = np.mean(cdist(embeddings, embeddings, 'euclidean'))
-        else:
+        if loop_id != 0:
             pairwise_distances = np.mean(cdist(embeddings, embeddings, 'euclidean'))
-            if pairwise_distances < init_dist * args.convergence_scale:
-                log.info(f"Converge at {loop_id}. Target distance: {init_dist}, current pairwise distance: {pairwise_distances}. Final model saved at {prev_output_dir}")
+            threshold = init_dist * args.convergence_scale
+            log.info((f"Current pairwise distance: {pairwise_distances:.4f}; "
+                      f"Target threshold: {threshold:.4f} ({init_dist:.4f}x{args.convergence_scale})"))
+            if pairwise_distances < threshold:
+                log.info(f"Converge at {loop_id}. Final model saved at {prev_output_dir}")
                 return prev_output_dir
-            else:
-                log.info(f"Target distance: {init_dist}, current pairwise distance: {pairwise_distances}.")
+                
+        # set up the training data directory, overwrite and recreate
+        # the most cohesive cluster will be copied to the directory for training
+        args.train_data_dir_per_loop = os.path.join(train_data_dir_base, args.character_name, str(loop_id))
+        if os.path.exists(args.train_data_dir_per_loop):
+            shutil.rmtree(args.train_data_dir_per_loop)
+        os.makedirs(args.train_data_dir_per_loop)
+        
         # clustering
         centers, labels, elements, images = kmeans_clustering(args, embeddings, images = images)
         
@@ -165,6 +179,18 @@ def train_loop(args, loop_num: int, vis=True, start_from=0):
         train_pipeline(args, loop_id, loop_num)
         
         log.info(f"[{loop_id}/{loop_num-1}] Finish.")
+
+
+def load_all_img_embeddings(dir, feat_extractor, img_file_suffix='.png'):
+    img_embs = []
+    dir = Path(dir)
+    for child in dir.iterdir():
+        if child.with_suffix(img_file_suffix):
+            img = Image.open(child).convert('RGB')
+            emb = infer_model(feat_extractor, img).detach().cpu().numpy()
+            img_embs.append(emb)
+    log.info(f"Loaded {len(img_embs)} embeddings from '{dir}'.")
+    return img_embs
         
 
 def kmeans_clustering(args, data_points, images = None):
