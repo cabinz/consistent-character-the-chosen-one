@@ -1,3 +1,32 @@
+# Enviroment Setups
+
+## Installation 0.24.0.dev0
+
+Problem: 
+```shell
+ImportError: cannot import name 'text_encoder_lora_state_dict' from 'diffusers.models.lora' (/usr/local/lib/python3.11/site-packages/diffusers/models/lora.py)
+```
+
+Solution:
+```shell
+# https://github.com/ZichengDuan/TheChosenOne/issues/17#issuecomment-2027831295
+git clone https://github.com/huggingface/diffusers
+cd diffusers
+git checkout 3517fb9 # the version v0.24.0.dev0
+pip install .
+```
+
+## Undefined symbol
+Problem:
+`... linux-gnu.so: undefined symbol ...`
+
+Solution:
+```shell
+# https://github.com/chenfei-wu/TaskMatrix/issues/116#issuecomment-1844795197
+pip uninstall transformer-engine
+```
+
+
 # The Chosen One: Consistent Characters in Text-to-Image Diffusion Models (Unofficial implementation)
 
 This repository contains the **unofficial** PyTorch implementation of the paper [The Chosen One: Consistent Characters in Text-to-Image Diffusion Models](https://arxiv.org/abs/2311.10093), using the Diffuser framework. 
