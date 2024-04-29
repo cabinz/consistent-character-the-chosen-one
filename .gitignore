@@ -1,4 +1,11 @@
-out/
+out/data/pool/*
+out/data/cohesion/*
+out/inference_results/*
+out/kmeans_results/*
+out/log/*
+out/models/*
+out/naive_gen/*
+
 bak/
 wandb/
 
